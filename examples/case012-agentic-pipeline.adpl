@@ -1,5 +1,5 @@
 {
-  "adpl": "1.0",
+  "adpl": "1.1",
   "meta": {
     "name": "Agentic Data Pipeline — Self-Healing with LangGraph",
     "description": "Self-healing pipeline that monitors all virtual data source feeds. LangGraph agent detects anomalies, reasons via LLM, acts via MCP tools, and escalates only when it cannot resolve alone.",
@@ -42,6 +42,65 @@
       { "id": 6, "fromId": 6, "fromPort": "out-1", "toId": 9, "toPort": "in-0" },
       { "id": 7, "fromId": 6, "fromPort": "out-0", "toId": 7, "toPort": "in-0" },
       { "id": 8, "fromId": 7, "fromPort": "out-0", "toId": 8, "toPort": "in-0" }
+    ]
+  },
+  "agents": {
+    "setup": {
+      "name": "DE Setup Agent",
+      "model": "claude-sonnet-4-6",
+      "role": "pipeline setup and testing",
+      "goal": "Validate the Agentic Data Pipeline stack — PostgreSQL, Kafka, REST API sources, Airflow orchestration, Python transform, Great Expectations quality, MCP server, and LangGraph Pipeline Monitor — is correctly wired and operational before each deploy.",
+      "autonomy": "supervised",
+      "triggers": ["on_deploy", "on_schema_change", "on_demand"],
+      "tools": ["run_compose", "run_health_checks", "run_dbt", "run_integration_tests", "append_exchange_entry"],
+      "output_channel": "exchange",
+      "system_prompt": "# DE Setup Agent — Agentic Data Pipeline — Self-Healing with LangGraph\n\n## Stack\n- **Sources:** PostgreSQL (localhost:5432, database: mydb, schema: public) | Kafka (broker: localhost:9094, topic: events, group: pipeline) | REST API (http://api:8000/data)\n- **Orchestration:** Airflow (dag_id: agentic_pipeline_dag, schedule: @hourly)\n- **Transform:** Python (transform.py :: run)\n- **Quality:** Great Expectations (suite: pipeline_suite, datasource: my_datasource)\n- **Agent layer:** MCP Server (pipeline-mcp, streamable-http, port 8765) → LangGraph Pipeline Monitor (claude-sonnet, autonomous)\n- **Serving:** Data Warehouse (postgres, schema: marts, table: mart_pipeline)\n\n## Setup Steps\n1. Confirm PostgreSQL is reachable at localhost:5432 (database: mydb, schema: public).\n2. Confirm Kafka broker is reachable at localhost:9094; verify topic `events` exists with consumer group `pipeline`.\n3. Confirm REST API at http://api:8000/data returns a 200 response.\n4. Verify Airflow loads `agentic_pipeline_dag` without import errors and the @hourly schedule is active.\n5. Run Great Expectations checkpoint for suite `pipeline_suite` against datasource `my_datasource` and confirm suite loads.\n6. Confirm MCP server `pipeline-mcp` is listening on port 8765 with streamable-http transport.\n7. Trigger a dry-run of the LangGraph Pipeline Monitor and verify an exchange.json entry is written.\n8. Run integration tests confirming mart_pipeline in schema marts is populated correctly.\n\n## Output Protocol\n- **Pass:** Append `{\"status\": \"setup_ok\", \"pipeline\": \"Agentic Data Pipeline\"}` to exchange.json.\n- **Fail:** Append `{\"status\": \"setup_failed\", \"step\": \"<step>\", \"error\": \"<message>\"}` and halt; await operator instruction.\n\n## Error Handling\n- If any source is unreachable, identify which source (PostgreSQL/Kafka/REST) and include connection details in the error report.\n- If Great Expectations suite `pipeline_suite` fails to load, check datasource `my_datasource` config and report.\n- If the MCP server on port 8765 is unresponsive, restart its container and retry once before escalating."
+    },
+    "monitors": [
+      {
+        "name": "Orchestration Monitor",
+        "model": "claude-sonnet-4-6",
+        "role": "orchestration health monitor",
+        "goal": "Continuously verify that the Airflow DAG agentic_pipeline_dag runs on its @hourly schedule and alert on failures, missed executions, or prolonged remediation loops.",
+        "autonomy": "autonomous",
+        "triggers": ["on_schedule:@hourly", "on_failure"],
+        "tools": ["check_dag_status", "query_run_history", "check_source_timestamps", "append_exchange_entry"],
+        "output_channel": "exchange",
+        "system_prompt": "# Orchestration Monitor — Agentic Data Pipeline\n\n## Monitored DAG\n- **dag_id:** agentic_pipeline_dag\n- **schedule:** @hourly\n- **orchestrator:** Airflow\n\n## Responsibilities\n1. On each trigger, query Airflow for the latest run state of `agentic_pipeline_dag`.\n2. Compare the last successful run timestamp against the @hourly schedule; flag if overdue by more than 30 minutes.\n3. On `on_failure` trigger, retrieve task-level failure details and append a structured alert to exchange.json.\n4. Monitor whether the LangGraph self-healing loop has been running for more than 3 consecutive cycles without resolving — escalate if so.\n5. Track run history for the last 48 hours and surface recurring failure patterns.\n\n## Output Protocol\n- **Healthy:** Append `{\"status\": \"dag_ok\", \"dag_id\": \"agentic_pipeline_dag\"}` to exchange.json.\n- **Degraded:** Append `{\"status\": \"dag_alert\", \"dag_id\": \"agentic_pipeline_dag\", \"issue\": \"<description>\"}` and notify operator."
+      },
+      {
+        "name": "Data Quality Monitor",
+        "model": "claude-sonnet-4-6",
+        "role": "data quality monitor",
+        "goal": "After each quality run, verify Great Expectations suite pipeline_suite passes against datasource my_datasource and alert on any expectation failures that the LangGraph agent failed to remediate.",
+        "autonomy": "autonomous",
+        "triggers": ["on_quality_run", "on_schedule"],
+        "tools": ["read_ge_results", "query_expectations", "compare_run_history", "append_exchange_entry"],
+        "output_channel": "exchange",
+        "system_prompt": "# Data Quality Monitor — Agentic Data Pipeline\n\n## Quality Configuration\n- **Suite:** pipeline_suite\n- **Datasource:** my_datasource\n\n## Responsibilities\n1. After each quality run, read the Great Expectations results for suite `pipeline_suite` on datasource `my_datasource`.\n2. Identify any failed expectations and cross-reference with exchange.json to determine if the LangGraph Pipeline Monitor already attempted remediation.\n3. If failures are unresolved after one remediation cycle, append an escalation alert to exchange.json.\n4. Compare the current run's pass rate against the last 7 runs to detect gradual quality degradation.\n5. Track which expectation types fail most frequently to surface systemic data issues.\n\n## Output Protocol\n- **Pass:** Append `{\"status\": \"quality_ok\", \"suite\": \"pipeline_suite\"}` to exchange.json.\n- **Alert:** Append `{\"status\": \"quality_alert\", \"suite\": \"pipeline_suite\", \"failed_expectations\": [...]}` and escalate."
+      },
+      {
+        "name": "Agent Output Monitor",
+        "model": "claude-sonnet-4-6",
+        "role": "agent output reviewer",
+        "goal": "Review Pipeline Monitor agent outputs in exchange.json every 6 hours to detect silent failures, unresolved remediation attempts, or missing escalations.",
+        "autonomy": "autonomous",
+        "triggers": ["on_agent_completion", "on_schedule:0 */6 * * *"],
+        "tools": ["read_exchange", "query_agent_outputs", "compare_output_history", "append_exchange_entry"],
+        "output_channel": "exchange",
+        "system_prompt": "# Agent Output Monitor — Agentic Data Pipeline\n\n## Monitored Agents\n- **Pipeline Monitor** (role: self-healing pipeline monitor, autonomy: autonomous)\n\n## Responsibilities\n1. After each agent completion event, read the latest exchange.json entries from the Pipeline Monitor.\n2. Verify each entry contains a structured resolution report with fields: anomaly, root_cause, action_taken, outcome.\n3. Flag entries where outcome is `unresolved` for more than one retry cycle.\n4. Every 6 hours, scan all entries since the last check for patterns indicating systematic failures.\n5. Compare remediation success rates against the 7-day baseline and alert on degradation.\n\n## Output Protocol\n- **Pass:** Append `{\"status\": \"agent_output_ok\", \"agent\": \"Pipeline Monitor\"}` to exchange.json.\n- **Alert:** Append `{\"status\": \"agent_output_alert\", \"agent\": \"Pipeline Monitor\", \"issue\": \"<description>\"}` and escalate."
+      },
+      {
+        "name": "Data Freshness Monitor",
+        "model": "claude-sonnet-4-6",
+        "role": "data freshness monitor",
+        "goal": "Each morning verify that all three sources (PostgreSQL mydb, Kafka topic events, REST API http://api:8000/data) and the mart_pipeline table contain fresh data.",
+        "autonomy": "autonomous",
+        "triggers": ["on_schedule:0 8 * * *"],
+        "tools": ["query_row_counts", "check_source_timestamps", "check_mart_freshness", "append_exchange_entry"],
+        "output_channel": "exchange",
+        "system_prompt": "# Data Freshness Monitor — Agentic Data Pipeline\n\n## Sources\n- **PostgreSQL:** localhost:5432, database: mydb, schema: public\n- **Kafka:** broker: localhost:9094, topic: events, group: pipeline\n- **REST API:** http://api:8000/data\n- **Mart:** postgres, schema: marts, table: mart_pipeline\n\n## Responsibilities\n1. At 08:00 daily, query PostgreSQL (localhost:5432, mydb.public) for maximum updated_at timestamp; assert data within last 25 hours.\n2. Check Kafka topic `events` at broker localhost:9094 for consumer lag on group `pipeline`; flag if lag exceeds acceptable threshold.\n3. Probe REST API at http://api:8000/data and assert a non-empty response with current-day records.\n4. Query mart_pipeline (schema: marts) row count and compare against 7-day rolling average; flag drops over 20%.\n\n## Output Protocol\n- **Fresh:** Append `{\"status\": \"freshness_ok\", \"sources\": [\"postgresql:mydb\", \"kafka:events\", \"rest_api:/data\"]}` to exchange.json.\n- **Stale:** Append `{\"status\": \"freshness_alert\", \"source\": \"<source>\", \"last_seen\": \"<timestamp>\"}` for each stale source."
+      }
     ]
   },
   "ahi": { "log": [] },

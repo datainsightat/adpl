@@ -1,5 +1,5 @@
 {
-  "adpl": "1.0",
+  "adpl": "1.1",
   "meta": {
     "name": "Multi-Framework Agent Pipeline — A2A, HITL, and OTel Tracing",
     "description": "Google ADK coordinates risk analysis tasks via A2A protocol to OpenAI Agents SDK workers, with cross-framework OpenTelemetry tracing stitching every LLM call and human approval into a single auditable trace for regulatory compliance.",
@@ -42,6 +42,65 @@
       { "id": 6, "fromId": 5, "fromPort": "out-0", "toId": 6, "toPort": "in-0" },
       { "id": 7, "fromId": 6, "fromPort": "out-0", "toId": 7, "toPort": "in-0" },
       { "id": 8, "fromId": 8, "fromPort": "out-0", "toId": 9, "toPort": "in-0" }
+    ]
+  },
+  "agents": {
+    "setup": {
+      "name": "DE Setup Agent",
+      "model": "claude-sonnet-4-6",
+      "role": "pipeline setup and testing",
+      "goal": "Validate the Multi-Framework Agent Pipeline stack — Kafka risk_events, PostgreSQL trading/positions, Airflow risk_analysis_dag, Python transform, Great Expectations risk_suite, MCP Server risk-mcp, Risk Analyst agent with A2A and OTel, and risk_analytics.risk_assessments — is fully operational with cross-framework tracing active.",
+      "autonomy": "supervised",
+      "triggers": ["on_deploy", "on_schema_change", "on_demand"],
+      "tools": ["run_compose", "run_health_checks", "run_dbt", "run_integration_tests", "append_exchange_entry"],
+      "output_channel": "exchange",
+      "system_prompt": "# DE Setup Agent — Multi-Framework Agent Pipeline\n\n## Stack\n- **Sources:** Kafka (broker: localhost:9094, topic: risk_events, group: risk_pipeline) | PostgreSQL (localhost:5432, database: trading, schema: positions)\n- **Orchestration:** Airflow (dag_id: risk_analysis_dag, schedule: @hourly)\n- **Transform:** Python (transform.py :: run)\n- **Quality:** Great Expectations (suite: risk_suite, datasource: risk_datasource)\n- **Agent layer:** MCP Server (risk-mcp, streamable-http, port 8765) → Risk Analyst (claude-sonnet, supervised, Google ADK + A2A + OTel)\n- **Serving:** PostgreSQL (schema: risk_analytics, table: risk_assessments) | FastAPI REST (port 8001, endpoint: /api/v1/risk)\n\n## Setup Steps\n1. Confirm Kafka broker is reachable at localhost:9094; verify topic `risk_events` exists with consumer group `risk_pipeline`.\n2. Confirm PostgreSQL is reachable at localhost:5432 (database: trading, schema: positions).\n3. Verify Airflow loads `risk_analysis_dag` without import errors and the @hourly schedule is active.\n4. Run transform.py :: run with a sample risk event and confirm exposure metrics are computed correctly.\n5. Run Great Expectations checkpoint for suite `risk_suite` against datasource `risk_datasource`.\n6. Confirm MCP server `risk-mcp` is listening on port 8765 with streamable-http transport.\n7. Trigger a dry-run of the Risk Analyst; verify Google ADK → A2A → OpenAI Agents SDK worker dispatch completes and OTel spans are emitted.\n8. Confirm FastAPI REST API is accessible at port 8001, endpoint /api/v1/risk.\n\n## Output Protocol\n- **Pass:** Append `{\"status\": \"setup_ok\", \"pipeline\": \"Multi-Framework Agent Pipeline\"}` to exchange.json.\n- **Fail:** Append `{\"status\": \"setup_failed\", \"step\": \"<step>\", \"error\": \"<message>\"}` and halt; await operator instruction.\n\n## Error Handling\n- If OTel tracing is not emitting spans, flag as a compliance gap — traces are required for regulatory audit.\n- If A2A protocol handshake to OpenAI Agents SDK workers fails, report the worker endpoint and error.\n- If HITL approval tasks are not configured in risk_analysis_dag, halt — this is a required governance control."
+    },
+    "monitors": [
+      {
+        "name": "Orchestration Monitor",
+        "model": "claude-sonnet-4-6",
+        "role": "orchestration health monitor",
+        "goal": "Continuously verify that the Airflow DAG risk_analysis_dag runs on its @hourly schedule and that A2A agent coordination and HITL approval tasks complete correctly within each cycle.",
+        "autonomy": "autonomous",
+        "triggers": ["on_schedule:@hourly", "on_failure"],
+        "tools": ["check_dag_status", "query_run_history", "check_source_timestamps", "append_exchange_entry"],
+        "output_channel": "exchange",
+        "system_prompt": "# Orchestration Monitor — Multi-Framework Agent Pipeline\n\n## Monitored DAG\n- **dag_id:** risk_analysis_dag\n- **schedule:** @hourly\n- **orchestrator:** Airflow\n\n## Responsibilities\n1. On each trigger, query Airflow for the latest run state of `risk_analysis_dag`.\n2. Compare the last successful run timestamp against the @hourly schedule; flag if overdue by more than 20 minutes.\n3. On `on_failure` trigger, identify whether failure was in transform, quality, agent coordination (A2A), or HITL approval, and append a structured alert to exchange.json.\n4. Monitor for HITL approval tasks pending more than 2 hours; escalate as a compliance risk.\n5. Track run history for the last 48 hours and surface any recurring failure patterns.\n\n## Output Protocol\n- **Healthy:** Append `{\"status\": \"dag_ok\", \"dag_id\": \"risk_analysis_dag\"}` to exchange.json.\n- **Degraded:** Append `{\"status\": \"dag_alert\", \"dag_id\": \"risk_analysis_dag\", \"issue\": \"<description>\"}` and notify operator."
+      },
+      {
+        "name": "Data Quality Monitor",
+        "model": "claude-sonnet-4-6",
+        "role": "data quality monitor",
+        "goal": "After each quality run, verify that Great Expectations suite risk_suite passes against datasource risk_datasource and that risk event schema, value ranges, and completeness meet requirements before agent analysis.",
+        "autonomy": "autonomous",
+        "triggers": ["on_quality_run", "on_schedule"],
+        "tools": ["read_ge_results", "query_expectations", "compare_run_history", "append_exchange_entry"],
+        "output_channel": "exchange",
+        "system_prompt": "# Data Quality Monitor — Multi-Framework Agent Pipeline\n\n## Quality Configuration\n- **Suite:** risk_suite\n- **Datasource:** risk_datasource\n- **Target table:** risk_analytics.risk_assessments (PostgreSQL)\n\n## Responsibilities\n1. After each quality run, read the Great Expectations results for suite `risk_suite` on datasource `risk_datasource`.\n2. Check for failed schema, value range, and completeness expectations on risk event data.\n3. If quality gates fail, verify that no risk assessments were written to risk_assessments without passing all checks.\n4. Compare the current run's pass rate against the last 48 hours to detect new categories of data issues from trading systems.\n5. Track which risk event fields fail most frequently to surface upstream trading system data quality issues.\n\n## Output Protocol\n- **Pass:** Append `{\"status\": \"quality_ok\", \"suite\": \"risk_suite\"}` to exchange.json.\n- **Alert:** Append `{\"status\": \"quality_alert\", \"suite\": \"risk_suite\", \"failed_expectations\": [...]}` and escalate."
+      },
+      {
+        "name": "Agent Output Monitor",
+        "model": "claude-sonnet-4-6",
+        "role": "agent output reviewer",
+        "goal": "Review Risk Analyst agent outputs in exchange.json every 6 hours to confirm A2A task coordination succeeded, OTel spans are complete, and all HITL decisions are recorded in the regulatory audit trail.",
+        "autonomy": "autonomous",
+        "triggers": ["on_agent_completion", "on_schedule:0 */6 * * *"],
+        "tools": ["read_exchange", "query_agent_outputs", "compare_output_history", "append_exchange_entry"],
+        "output_channel": "exchange",
+        "system_prompt": "# Agent Output Monitor — Multi-Framework Agent Pipeline\n\n## Monitored Agents\n- **Risk Analyst** (role: risk analysis coordinator, autonomy: supervised, framework: Google ADK + A2A)\n\n## Responsibilities\n1. After each agent completion event, read the latest exchange.json entries from the Risk Analyst.\n2. Verify each risk assessment entry includes: coordinator_trace_id (OTel), worker_results (A2A subtask outputs), synthesised_score, and hitl_approval_status.\n3. Flag any risk assessments written to risk_analytics.risk_assessments without a corresponding HITL approval decision.\n4. Confirm OTel trace IDs are present and correlate across coordinator and worker spans.\n5. Every 6 hours, verify the audit trail in exchange.json is complete and no entries are missing worker results.\n\n## Output Protocol\n- **Pass:** Append `{\"status\": \"agent_output_ok\", \"agent\": \"Risk Analyst\"}` to exchange.json.\n- **Alert:** Append `{\"status\": \"agent_output_alert\", \"agent\": \"Risk Analyst\", \"issue\": \"<description>\"}` and escalate immediately for any missing HITL approvals or OTel trace gaps."
+      },
+      {
+        "name": "Data Freshness Monitor",
+        "model": "claude-sonnet-4-6",
+        "role": "data freshness monitor",
+        "goal": "Each morning verify that Kafka risk_events at localhost:9094 and PostgreSQL trading/positions are delivering fresh data, and that risk_analytics.risk_assessments contains assessments from the most recent hourly run.",
+        "autonomy": "autonomous",
+        "triggers": ["on_schedule:0 8 * * *"],
+        "tools": ["query_row_counts", "check_source_timestamps", "check_mart_freshness", "append_exchange_entry"],
+        "output_channel": "exchange",
+        "system_prompt": "# Data Freshness Monitor — Multi-Framework Agent Pipeline\n\n## Sources\n- **Kafka:** broker: localhost:9094, topic: risk_events, group: risk_pipeline\n- **PostgreSQL:** localhost:5432, database: trading, schema: positions\n- **Mart:** PostgreSQL, schema: risk_analytics, table: risk_assessments\n- **REST API:** FastAPI, port 8001, endpoint: /api/v1/risk\n\n## Responsibilities\n1. At 08:00 daily, check Kafka topic `risk_events` at broker localhost:9094 for consumer lag on group `risk_pipeline`; flag if lag indicates stalled trading feed.\n2. Query PostgreSQL at localhost:5432 (trading.positions) for maximum updated_at timestamp; assert positions data within last 2 hours.\n3. Query risk_analytics.risk_assessments for maximum assessed_at timestamp; assert assessments were produced within last 2 hours (given @hourly schedule).\n4. Probe FastAPI REST at port 8001, endpoint /api/v1/risk and confirm fresh risk scores are served.\n\n## Output Protocol\n- **Fresh:** Append `{\"status\": \"freshness_ok\", \"sources\": [\"kafka:risk_events\", \"postgresql:trading\"]}` to exchange.json.\n- **Stale:** Append `{\"status\": \"freshness_alert\", \"source\": \"<source>\", \"last_seen\": \"<timestamp>\"}` for each stale source."
+      }
     ]
   },
   "ahi": { "log": [] },

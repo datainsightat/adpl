@@ -1,0 +1,258 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/datainsightat/adpl/raw/main/schema/v1.1.json",
+  "title": "ADPL v1.1 — Agentic Data Pipeline Language",
+  "description": "Schema for .adpl files v1.1. Adds 'agents' section with embedded DE Setup Agent and Monitor Agent system prompts.",
+  "type": "object",
+  "required": ["adpl", "meta", "pipeline", "agents", "ahi", "summary"],
+  "additionalProperties": false,
+  "definitions": {
+    "agentDef": {
+      "type": "object",
+      "required": ["name", "model", "role", "goal", "autonomy", "triggers", "tools", "output_channel", "system_prompt"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Agent display name."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "LLM model ID, e.g. 'claude-sonnet-4-6'."
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Short role description, e.g. 'pipeline setup and testing'."
+        },
+        "goal": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One-sentence goal statement."
+        },
+        "autonomy": {
+          "type": "string",
+          "enum": ["supervised", "autonomous", "advisory"],
+          "description": "Autonomy level: supervised (human approves), autonomous (acts independently), advisory (suggests only)."
+        },
+        "triggers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Event strings that invoke this agent, e.g. ['on_deploy', 'on_schedule:0 6 * * *']."
+        },
+        "tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tool names available to this agent."
+        },
+        "output_channel": {
+          "type": "string",
+          "description": "Where output is written, e.g. 'exchange'."
+        },
+        "system_prompt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Full system prompt text (Markdown). Must reference actual config values from pipeline.nodes[].config."
+        }
+      }
+    }
+  },
+  "properties": {
+    "adpl": {
+      "type": "string",
+      "const": "1.1",
+      "description": "Format version identifier. Must be '1.1'."
+    },
+    "meta": {
+      "type": "object",
+      "required": ["name", "description", "created", "updated", "author", "tags", "autonomy_level", "tool"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Short pipeline name."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable description of what this pipeline does."
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 creation timestamp."
+        },
+        "updated": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 last-update timestamp."
+        },
+        "project": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "url": { "type": "string" },
+            "case_number": { "type": "string", "pattern": "^[0-9]+$" }
+          }
+        },
+        "author": {
+          "type": "string",
+          "description": "Creator identity — person, tool, or agent name."
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Technology and domain tags."
+        },
+        "autonomy_level": {
+          "type": "string",
+          "enum": ["L0", "L2", "L4"],
+          "description": "L0 = no agents, L2 = supervised agents, L4 = multi-agent autonomous."
+        },
+        "tool": {
+          "type": "string",
+          "description": "Tool that produced this file."
+        }
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "required": ["goal", "nodes", "edges"],
+      "additionalProperties": false,
+      "properties": {
+        "goal": {
+          "type": "string",
+          "description": "One-sentence description of the pipeline's purpose."
+        },
+        "nodes": {
+          "type": "array",
+          "description": "Canvas nodes.",
+          "items": {
+            "type": "object",
+            "required": ["id", "subtype", "type", "label", "icon", "x", "y", "config"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "integer", "minimum": 1 },
+              "subtype": {
+                "type": "string",
+                "enum": [
+                  "postgresql", "kafka", "mongodb", "csv", "rest_api", "minio",
+                  "dbt", "python",
+                  "airflow", "dagster",
+                  "mcp_server", "ai_agent",
+                  "great_expectations",
+                  "rest_serve", "dashboard", "data_warehouse"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": ["source", "transform", "orchestration", "agent", "quality", "serving", "human"]
+              },
+              "label": { "type": "string" },
+              "icon": { "type": "string" },
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "config": {
+                "type": "object",
+                "description": "Node-specific configuration. All values are strings.",
+                "additionalProperties": { "type": "string" }
+              }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "description": "Directed connections between node ports.",
+          "items": {
+            "type": "object",
+            "required": ["id", "fromId", "fromPort", "toId", "toPort"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "integer", "minimum": 1 },
+              "fromId": { "type": "integer" },
+              "fromPort": { "type": "string", "pattern": "^out-[0-9]+$" },
+              "toId": { "type": "integer" },
+              "toPort": { "type": "string", "pattern": "^in-[0-9]+$" }
+            }
+          }
+        }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "required": ["setup", "monitors"],
+      "additionalProperties": false,
+      "description": "Embedded operational agent definitions. setup runs once at deploy; monitors run on schedule or trigger.",
+      "properties": {
+        "setup": {
+          "$ref": "#/definitions/agentDef",
+          "description": "DE Setup Agent — initialises infrastructure, runs integration tests, declares pipeline ready."
+        },
+        "monitors": {
+          "type": "array",
+          "description": "Zero or more monitor agents. Each watches one operational concern.",
+          "items": { "$ref": "#/definitions/agentDef" }
+        }
+      }
+    },
+    "ahi": {
+      "type": "object",
+      "required": ["log"],
+      "additionalProperties": false,
+      "properties": {
+        "log": {
+          "type": "array",
+          "description": "Agent-Human Interface coordination log entries.",
+          "items": {
+            "type": "object",
+            "required": ["id", "type", "from", "to", "date", "status", "content"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "type": {
+                "type": "string",
+                "enum": ["observation", "recommendation", "alert", "acknowledgement", "order", "approval", "override"]
+              },
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "date": { "type": "string", "format": "date" },
+              "status": { "type": "string", "enum": ["noted", "pending", "acted"] },
+              "content": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["sources", "transform", "orchestration", "quality", "serving", "agents"],
+      "additionalProperties": false,
+      "description": "Computed summary — derived from pipeline.nodes, for display only.",
+      "properties": {
+        "sources": { "type": "array", "items": { "type": "string" } },
+        "transform": { "type": "string" },
+        "orchestration": { "type": "string" },
+        "quality": { "type": "string" },
+        "serving": { "type": "array", "items": { "type": "string" } },
+        "agents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "model", "role", "autonomy"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "model": { "type": "string" },
+              "role": { "type": "string" },
+              "autonomy": { "type": "string", "enum": ["supervised", "autonomous", "advisory"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}
