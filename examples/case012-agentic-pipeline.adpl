@@ -1,0 +1,58 @@
+{
+  "adpl": "1.0",
+  "meta": {
+    "name": "Agentic Data Pipeline — Self-Healing with LangGraph",
+    "description": "Self-healing pipeline that monitors all virtual data source feeds. LangGraph agent detects anomalies, reasons via LLM, acts via MCP tools, and escalates only when it cannot resolve alone.",
+    "created": "2026-03-16T00:00:00Z",
+    "updated": "2026-03-16T00:00:00Z",
+    "project": { "name": "Case #012 — Agentic Data Pipeline", "url": "projects/agentic-pipeline/index.html", "case_number": "012" },
+    "author": "H.A.R.L.I.E. pipeline_builder agent",
+    "tags": ["postgresql", "kafka", "rest_api", "python", "airflow", "great_expectations", "mcp_server", "ai_agent", "data_warehouse"],
+    "autonomy_level": "L4",
+    "tool": "datainsight.at Pipeline CAD"
+  },
+  "pipeline": {
+    "goal": "Self-healing multi-source pipeline with LangGraph agent for autonomous anomaly detection and resolution",
+    "nodes": [
+      { "id": 1, "subtype": "postgresql", "type": "source", "label": "PostgreSQL", "icon": "🗄", "x": 100, "y": 150,
+        "config": { "description": "Primary transactional data source with orders and user data", "host": "localhost", "port": "5432", "database": "mydb", "schema": "public" }},
+      { "id": 2, "subtype": "kafka", "type": "source", "label": "Kafka", "icon": "📨", "x": 100, "y": 390,
+        "config": { "description": "Real-time event stream from virtual data source", "broker": "localhost:9094", "topic": "events", "group": "pipeline" }},
+      { "id": 3, "subtype": "rest_api", "type": "source", "label": "REST API", "icon": "🔌", "x": 100, "y": 630,
+        "config": { "description": "Third virtual data source providing enrichment data via REST", "url": "http://api:8000", "path": "/data" }},
+      { "id": 4, "subtype": "airflow", "type": "orchestration", "label": "Airflow", "icon": "🌬️", "x": 340, "y": 390,
+        "config": { "description": "Orchestrates extraction, quality checks, and agent-triggered remediation steps", "dag_id": "agentic_pipeline_dag", "schedule": "@hourly" }},
+      { "id": 5, "subtype": "python", "type": "transform", "label": "Python", "icon": "🐍", "x": 580, "y": 150,
+        "config": { "description": "Merge and normalise multi-source data, apply business transformations", "script": "transform.py", "function": "run" }},
+      { "id": 6, "subtype": "great_expectations", "type": "quality", "label": "Great Expectations", "icon": "✅", "x": 580, "y": 390,
+        "config": { "description": "Validate merged dataset quality; failures trigger LangGraph agent investigation", "suite": "pipeline_suite", "datasource": "my_datasource" }},
+      { "id": 7, "subtype": "mcp_server", "type": "agent", "label": "MCP Server", "icon": "🔧", "x": 580, "y": 630,
+        "config": { "description": "MCP server exposing pipeline data, quality results, and exchange log to LangGraph agent", "name": "pipeline-mcp", "transport": "streamable-http", "port": "8765", "tools": "query_mart\nread_staging_files\nread_quality_results\nread_exchange\nappend_exchange_entry\ntrigger_rerun" }},
+      { "id": 8, "subtype": "ai_agent", "type": "agent", "label": "LangGraph Agent", "icon": "🤖", "x": 580, "y": 870,
+        "config": { "name": "Pipeline Monitor", "model": "claude-sonnet", "role": "self-healing pipeline monitor", "goal": "Detect anomalies, reason about root causes via LLM, attempt autonomous remediation via MCP tools, and escalate to human operator via exchange.json only when resolution fails", "autonomy": "autonomous", "description": "LangGraph-based agent with ReAct reasoning loop; reads quality failures, applies remediation playbooks, and writes resolution reports to exchange.json" }},
+      { "id": 9, "subtype": "data_warehouse", "type": "serving", "label": "Data Warehouse", "icon": "🏛", "x": 820, "y": 390,
+        "config": { "description": "Cleaned and validated data mart serving downstream analytics consumers", "type": "postgres", "schema": "marts", "table": "mart_pipeline" }}
+    ],
+    "edges": [
+      { "id": 1, "fromId": 1, "fromPort": "out-0", "toId": 4, "toPort": "in-0" },
+      { "id": 2, "fromId": 2, "fromPort": "out-0", "toId": 4, "toPort": "in-0" },
+      { "id": 3, "fromId": 3, "fromPort": "out-0", "toId": 4, "toPort": "in-0" },
+      { "id": 4, "fromId": 4, "fromPort": "out-0", "toId": 5, "toPort": "in-0" },
+      { "id": 5, "fromId": 5, "fromPort": "out-0", "toId": 6, "toPort": "in-0" },
+      { "id": 6, "fromId": 6, "fromPort": "out-1", "toId": 9, "toPort": "in-0" },
+      { "id": 7, "fromId": 6, "fromPort": "out-0", "toId": 7, "toPort": "in-0" },
+      { "id": 8, "fromId": 7, "fromPort": "out-0", "toId": 8, "toPort": "in-0" }
+    ]
+  },
+  "ahi": { "log": [] },
+  "summary": {
+    "sources": ["postgresql", "kafka", "rest_api"],
+    "transform": "python",
+    "orchestration": "airflow",
+    "quality": "great_expectations",
+    "serving": ["data_warehouse"],
+    "agents": [
+      { "name": "Pipeline Monitor", "model": "claude-sonnet", "role": "self-healing pipeline monitor", "autonomy": "autonomous" }
+    ]
+  }
+}

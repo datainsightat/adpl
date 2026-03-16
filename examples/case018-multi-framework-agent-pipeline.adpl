@@ -1,0 +1,58 @@
+{
+  "adpl": "1.0",
+  "meta": {
+    "name": "Multi-Framework Agent Pipeline — A2A, HITL, and OTel Tracing",
+    "description": "Google ADK coordinates risk analysis tasks via A2A protocol to OpenAI Agents SDK workers, with cross-framework OpenTelemetry tracing stitching every LLM call and human approval into a single auditable trace for regulatory compliance.",
+    "created": "2026-03-16T00:00:00Z",
+    "updated": "2026-03-16T00:00:00Z",
+    "project": { "name": "Case #018 — Multi-Framework Agent Pipeline", "url": "projects/multi-framework-agent-pipeline/index.html", "case_number": "018" },
+    "author": "H.A.R.L.I.E. pipeline_builder agent",
+    "tags": ["kafka", "postgresql", "python", "airflow", "great_expectations", "mcp_server", "ai_agent", "data_warehouse", "rest_serve"],
+    "autonomy_level": "L4",
+    "tool": "datainsight.at Pipeline CAD"
+  },
+  "pipeline": {
+    "goal": "Coordinate multi-framework AI agents for risk analysis with full OTel tracing and HITL approval gates",
+    "nodes": [
+      { "id": 1, "subtype": "kafka",   "type": "source", "label": "Kafka",      "icon": "📨", "x": 100, "y": 150,
+        "config": { "description": "Real-time risk event stream from trading systems", "broker": "localhost:9094", "topic": "risk_events", "group": "risk_pipeline" }},
+      { "id": 2, "subtype": "postgresql", "type": "source", "label": "PostgreSQL", "icon": "🗄", "x": 100, "y": 390,
+        "config": { "description": "Historical trade and position database", "host": "localhost", "port": "5432", "database": "trading", "schema": "positions" }},
+      { "id": 3, "subtype": "airflow", "type": "orchestration", "label": "Airflow", "icon": "🌬️", "x": 340, "y": 270,
+        "config": { "description": "Orchestrates the full multi-agent risk analysis pipeline with HITL approval tasks", "dag_id": "risk_analysis_dag", "schedule": "@hourly" }},
+      { "id": 4, "subtype": "python",  "type": "transform", "label": "Python",    "icon": "🐍", "x": 580, "y": 150,
+        "config": { "description": "Normalise and enrich risk events; compute exposure metrics before agent analysis", "script": "transform.py", "function": "run" }},
+      { "id": 5, "subtype": "great_expectations", "type": "quality", "label": "Great Expectations", "icon": "✅", "x": 580, "y": 390,
+        "config": { "description": "Validate risk event schema, value ranges, and completeness before writing results", "suite": "risk_suite", "datasource": "risk_datasource" }},
+      { "id": 6, "subtype": "mcp_server", "type": "agent", "label": "MCP Server", "icon": "🔧", "x": 580, "y": 630,
+        "config": { "description": "Exposes risk data and exchange log to AI agents via MCP streamable-HTTP transport", "name": "risk-mcp", "transport": "streamable-http", "port": "8765", "tools": "query_positions\nread_risk_events\nread_exchange\nappend_exchange_entry" }},
+      { "id": 7, "subtype": "ai_agent", "type": "agent", "label": "Risk Analyst (Google ADK)", "icon": "🤖", "x": 580, "y": 870,
+        "config": { "name": "Risk Analyst", "model": "claude-sonnet", "role": "risk analysis coordinator", "goal": "Coordinate risk analysis tasks across OpenAI Agents SDK workers via A2A protocol and synthesise results for HITL review", "autonomy": "supervised", "description": "Google ADK coordinator agent distributing subtasks to specialised workers with OTel trace context propagation" }},
+      { "id": 8, "subtype": "data_warehouse", "type": "serving", "label": "Data Warehouse", "icon": "🏛", "x": 820, "y": 150,
+        "config": { "description": "Risk analysis results, audit trail, and OTel spans for regulatory reporting", "type": "postgres", "schema": "risk_analytics", "table": "risk_assessments" }},
+      { "id": 9, "subtype": "rest_serve", "type": "serving", "label": "REST API", "icon": "🚀", "x": 820, "y": 390,
+        "config": { "description": "Expose risk scores and agent recommendations to downstream consumers", "framework": "fastapi", "port": "8001", "endpoint": "/api/v1/risk" }}
+    ],
+    "edges": [
+      { "id": 1, "fromId": 1, "fromPort": "out-0", "toId": 3, "toPort": "in-0" },
+      { "id": 2, "fromId": 2, "fromPort": "out-0", "toId": 3, "toPort": "in-0" },
+      { "id": 3, "fromId": 3, "fromPort": "out-0", "toId": 4, "toPort": "in-0" },
+      { "id": 4, "fromId": 4, "fromPort": "out-0", "toId": 5, "toPort": "in-0" },
+      { "id": 5, "fromId": 5, "fromPort": "out-1", "toId": 8, "toPort": "in-0" },
+      { "id": 6, "fromId": 5, "fromPort": "out-0", "toId": 6, "toPort": "in-0" },
+      { "id": 7, "fromId": 6, "fromPort": "out-0", "toId": 7, "toPort": "in-0" },
+      { "id": 8, "fromId": 8, "fromPort": "out-0", "toId": 9, "toPort": "in-0" }
+    ]
+  },
+  "ahi": { "log": [] },
+  "summary": {
+    "sources": ["kafka", "postgresql"],
+    "transform": "python",
+    "orchestration": "airflow",
+    "quality": "great_expectations",
+    "serving": ["data_warehouse", "rest_serve"],
+    "agents": [
+      { "name": "Risk Analyst", "model": "claude-sonnet", "role": "risk analysis coordinator", "autonomy": "supervised" }
+    ]
+  }
+}

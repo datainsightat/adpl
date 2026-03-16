@@ -1,0 +1,47 @@
+{
+  "adpl": "1.0",
+  "meta": {
+    "name": "Kafka 4.2 Streaming Pipeline — Share Groups, Streams, and Lakehouse Sink",
+    "description": "A logistics parcel-tracking pipeline uses Kafka 4.2 Share Groups for true queue semantics with Kafka Streams DLQ routing and Delta Lake sink for lakehouse analytics via DuckDB.",
+    "created": "2026-03-16T00:00:00Z",
+    "updated": "2026-03-16T00:00:00Z",
+    "project": { "name": "Case #017 — Kafka 4.2 Streaming Pipeline", "url": "projects/kafka-streaming-pipeline/index.html", "case_number": "017" },
+    "author": "H.A.R.L.I.E. pipeline_builder agent",
+    "tags": ["kafka", "python", "dagster", "great_expectations", "data_warehouse", "dashboard"],
+    "autonomy_level": "L0",
+    "tool": "datainsight.at Pipeline CAD"
+  },
+  "pipeline": {
+    "goal": "Real-time parcel tracking with Kafka 4.2 Share Groups, DLQ routing, and Delta Lake lakehouse sink",
+    "nodes": [
+      { "id": 1, "subtype": "kafka", "type": "source", "label": "Kafka 4.2", "icon": "📨", "x": 100, "y": 270,
+        "config": { "description": "Parcel tracking event stream using Kafka 4.2 Share Groups for true queue semantics and parallel consumer scaling", "broker": "localhost:9094", "topic": "parcel_events", "group": "parcel_share_group" }},
+      { "id": 2, "subtype": "dagster", "type": "orchestration", "label": "Dagster", "icon": "💎", "x": 340, "y": 270,
+        "config": { "description": "Asset-based orchestration for streaming pipeline with materialisation tracking", "job_name": "parcel_tracking_job", "schedule": "0 * * * *" }},
+      { "id": 3, "subtype": "python", "type": "transform", "label": "Python", "icon": "🐍", "x": 580, "y": 150,
+        "config": { "description": "Kafka Streams processing: DLQ routing for malformed events, enrichment with carrier data, Delta Lake writer", "script": "stream_transform.py", "function": "run" }},
+      { "id": 4, "subtype": "great_expectations", "type": "quality", "label": "Great Expectations", "icon": "✅", "x": 580, "y": 390,
+        "config": { "description": "Validate parcel event schema completeness and tracking timestamp ordering", "suite": "parcel_suite", "datasource": "delta_datasource" }},
+      { "id": 5, "subtype": "data_warehouse", "type": "serving", "label": "Delta Lake / DuckDB", "icon": "🏛", "x": 820, "y": 150,
+        "config": { "description": "Delta Lake table as the lakehouse sink; queried via DuckDB for analytics", "type": "duckdb", "schema": "lakehouse", "table": "parcel_events_delta" }},
+      { "id": 6, "subtype": "dashboard", "type": "serving", "label": "Dashboard", "icon": "📊", "x": 820, "y": 390,
+        "config": { "description": "Real-time logistics dashboard showing delivery status, delays, and DLQ metrics", "tool": "grafana", "port": "3000" }}
+    ],
+    "edges": [
+      { "id": 1, "fromId": 1, "fromPort": "out-0", "toId": 2, "toPort": "in-0" },
+      { "id": 2, "fromId": 2, "fromPort": "out-0", "toId": 3, "toPort": "in-0" },
+      { "id": 3, "fromId": 3, "fromPort": "out-0", "toId": 4, "toPort": "in-0" },
+      { "id": 4, "fromId": 4, "fromPort": "out-1", "toId": 5, "toPort": "in-0" },
+      { "id": 5, "fromId": 5, "fromPort": "out-0", "toId": 6, "toPort": "in-0" }
+    ]
+  },
+  "ahi": { "log": [] },
+  "summary": {
+    "sources": ["kafka"],
+    "transform": "python",
+    "orchestration": "dagster",
+    "quality": "great_expectations",
+    "serving": ["data_warehouse", "dashboard"],
+    "agents": []
+  }
+}

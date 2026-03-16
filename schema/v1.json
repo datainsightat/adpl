@@ -1,0 +1,248 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/datainsightat/adpl/raw/main/schema/v1.json",
+  "title": "ADPL v1.0 — Agentic Data Pipeline Language",
+  "description": "Schema for .adpl files describing agentic data pipelines for the datainsight.at Pipeline CAD tool.",
+  "type": "object",
+  "required": ["adpl", "meta", "pipeline", "ahi", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "adpl": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Format version identifier. Must be '1.0'."
+    },
+    "meta": {
+      "type": "object",
+      "required": ["name", "description", "created", "updated", "author", "tags", "autonomy_level", "tool"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Short pipeline name."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable description of what this pipeline does."
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 creation timestamp."
+        },
+        "updated": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 last-update timestamp."
+        },
+        "project": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "url": { "type": "string" },
+            "case_number": { "type": "string", "pattern": "^[0-9]+$" }
+          }
+        },
+        "author": {
+          "type": "string",
+          "description": "Creator identity — person, tool, or agent name."
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Technology and domain tags for search and filtering."
+        },
+        "autonomy_level": {
+          "type": "string",
+          "enum": ["L0", "L2", "L4"],
+          "description": "L0 = no agents, L2 = supervised agents, L4 = multi-agent autonomous."
+        },
+        "tool": {
+          "type": "string",
+          "description": "Tool that produced this file. Expected: 'datainsight.at Pipeline CAD'."
+        }
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "required": ["goal", "nodes", "edges"],
+      "additionalProperties": false,
+      "properties": {
+        "goal": {
+          "type": "string",
+          "description": "One-sentence description of the pipeline's purpose."
+        },
+        "nodes": {
+          "type": "array",
+          "description": "Canvas nodes — sources, transforms, orchestrators, agents, quality gates, serving layers.",
+          "items": {
+            "type": "object",
+            "required": ["id", "subtype", "type", "label", "icon", "x", "y", "config"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Unique node ID within this file."
+              },
+              "subtype": {
+                "type": "string",
+                "enum": [
+                  "postgresql", "kafka", "mongodb", "csv", "rest_api", "minio",
+                  "dbt", "python",
+                  "airflow", "dagster",
+                  "mcp_server", "ai_agent",
+                  "great_expectations",
+                  "rest_serve", "dashboard", "data_warehouse"
+                ],
+                "description": "Node subtype key matching the Pipeline CAD catalog."
+              },
+              "type": {
+                "type": "string",
+                "enum": ["source", "transform", "orchestration", "agent", "quality", "serving", "human"],
+                "description": "Node category."
+              },
+              "label": {
+                "type": "string",
+                "description": "Display label shown on canvas."
+              },
+              "icon": {
+                "type": "string",
+                "description": "Emoji icon for the node."
+              },
+              "x": {
+                "type": "number",
+                "description": "Canvas X position in pixels."
+              },
+              "y": {
+                "type": "number",
+                "description": "Canvas Y position in pixels."
+              },
+              "config": {
+                "type": "object",
+                "description": "Node-specific configuration. All values are strings. Keys vary by subtype.",
+                "additionalProperties": { "type": "string" }
+              }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "description": "Directed connections between node output and input ports.",
+          "items": {
+            "type": "object",
+            "required": ["id", "fromId", "fromPort", "toId", "toPort"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Unique edge ID within this file."
+              },
+              "fromId": {
+                "type": "integer",
+                "description": "Source node ID."
+              },
+              "fromPort": {
+                "type": "string",
+                "pattern": "^out-[0-9]+$",
+                "description": "Output port key, e.g. 'out-0'."
+              },
+              "toId": {
+                "type": "integer",
+                "description": "Target node ID."
+              },
+              "toPort": {
+                "type": "string",
+                "pattern": "^in-[0-9]+$",
+                "description": "Input port key, e.g. 'in-0'."
+              }
+            }
+          }
+        }
+      }
+    },
+    "ahi": {
+      "type": "object",
+      "required": ["log"],
+      "additionalProperties": false,
+      "properties": {
+        "log": {
+          "type": "array",
+          "description": "Agent-Human Interface coordination log entries.",
+          "items": {
+            "type": "object",
+            "required": ["id", "type", "from", "to", "date", "status", "content"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique entry ID, e.g. 'agent-20260316-001'."
+              },
+              "type": {
+                "type": "string",
+                "enum": ["observation", "recommendation", "alert", "acknowledgement", "order", "approval", "override"]
+              },
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "date": { "type": "string", "format": "date" },
+              "status": {
+                "type": "string",
+                "enum": ["noted", "pending", "acted"]
+              },
+              "content": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["sources", "transform", "orchestration", "quality", "serving", "agents"],
+      "additionalProperties": false,
+      "description": "Computed summary — derived from pipeline.nodes, for display only.",
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of source subtype keys used in this pipeline."
+        },
+        "transform": {
+          "type": "string",
+          "description": "Transform subtype key, or empty string if none."
+        },
+        "orchestration": {
+          "type": "string",
+          "description": "Orchestration subtype key, or empty string if none."
+        },
+        "quality": {
+          "type": "string",
+          "description": "Quality subtype key, or empty string if none."
+        },
+        "serving": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of serving subtype keys."
+        },
+        "agents": {
+          "type": "array",
+          "description": "Agent configurations for quick inspection.",
+          "items": {
+            "type": "object",
+            "required": ["name", "model", "role", "autonomy"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "model": { "type": "string" },
+              "role": { "type": "string" },
+              "autonomy": { "type": "string", "enum": ["supervised", "autonomous", "advisory"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}
